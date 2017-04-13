@@ -1,108 +1,35 @@
 from __future__ import print_function
 
-import json
-import time
+import os
+from functools import wraps
 
 from fabric import api
-from fabric.context_managers import shell_env, hide
+from fabric.colors import green, red
+from fabric.context_managers import cd
 from fabric.decorators import task
 
-try:
-    with open('docker.settings.json') as fp:
-        _docker_settings = json.load(fp)
-except IOError:
-    _docker_settings = {}
-
-env = {}
-env.update(_docker_settings)
+from fabric_utils import local
+from fabric_utils.rabbit import manage_rabbitmq, wait_rabbit_for_start
 
 
-class ContainerFailedToStart(Exception):
-    pass
+GIT_ROOT = '/var/local/service'
+api.env.use_ssh_config = True
+api.env.sudo_user = 'user'
 
 
-def local(cmd, *args, **kwargs):
-    with shell_env(**env):
-        output = api.local(cmd, *args, **kwargs)
-
-    return output
-
-
-def create_vhost(vhost_name, credentials='guest:guest', rabbit_container_name='service_rabbit_1',
-                 network='service_default'):
-    _curl_opts = [
-        '-i',
-        '-u %s' % credentials,
-        '-H "content-type:application/json"',
-        '-X PUT',
-
-    ]
-    cmd = 'curl {opts} http://rabbit:15672/api/vhosts/{vhost} 2>/dev/null'.format(
-        cred=credentials, vhost=vhost_name, opts=' '.join(_curl_opts),
-    )
-    local('docker run --rm --link {rabbit_container}:rabbit --network {network} service {cmd}'.format(
-        rabbit_container=rabbit_container_name, cmd=cmd, network=network
-    ))
+def with_cd_to(path):
+    def decorator(func):
+        @wraps(func)
+        def wrapped(*args, **kwargs):
+            with cd(path):
+                res = func()
+                return res
+        return wrapped
+    return decorator
 
 
-def create_user(user_name='test', user_password='test', credentials='guest:guest',
-                rabbit_container_name='service_rabbit_1', network='service_default'):
-    _curl_opts = [
-        '-i',
-        '-u %s' % credentials,
-        '-H "content-type:application/json"',
-        '-X PUT',
-        '-d \'{"password":"%s", "tags":"administrator"}\'' % user_password
-    ]
-    cmd = 'curl {opts} http://rabbit:15672/api/users/{username} 2>/dev/null'.format(
-        cred=credentials, username=user_name, opts=' '.join(_curl_opts),
-    )
-
-    local('docker run --rm --link {rabbit_container}:rabbit --network {network} service {cmd}'.format(
-        rabbit_container=rabbit_container_name, cmd=cmd, network=network
-    ))
-
-
-def grant_permission(user_name='test', vhost='test', credentials='guest:guest',
-                rabbit_container_name='service_rabbit_1', network='service_default'):
-    _curl_opts = [
-        '-i',
-        '-u %s' % credentials,
-        '-H "content-type:application/json"',
-        '-X PUT',
-        '-d \'{"configure":".*", "write":".*", "read":".*"}\'',
-    ]
-    cmd = 'curl {opts} http://rabbit:15672/api/permissions/{vhost}/{user} 2>/dev/null'.format(
-        cred=credentials, user=user_name, vhost=vhost, opts=' '.join(_curl_opts),
-    )
-
-    local('docker run --rm --link {rabbit_container}:rabbit --network {network} service {cmd}'.format(
-        rabbit_container=rabbit_container_name, cmd=cmd, network=network
-    ))
-
-
-def manage_rabbitmq():
-    create_user('test', 'test')
-    create_vhost('dwh')
-    grant_permission(user_name='test', vhost='dwh')
-
-
-def wait_rabbit_for_start(container_name='service_rabbit_1', phrase='Server startup complete'):
-    with hide('output', 'running'):
-        sleep_time_sec = 5
-        count = int(300. / sleep_time_sec)
-        while True:
-            output = local('docker logs %s' % container_name, capture=True)
-            if phrase in output:
-                break
-
-            count -= 1
-            if not count:
-                print('Container %s failed to start, aborting' % container_name)
-                raise ContainerFailedToStart
-
-            print('Heartbeat... Waiting %s for start' % container_name)
-            time.sleep(sleep_time_sec)
+def with_cd_to_git_root(func):
+    return with_cd_to(GIT_ROOT)
 
 
 @task
@@ -116,3 +43,77 @@ def up():
 @task
 def clean():
     local('docker-compose down')
+
+
+@task
+def all_hosts():
+    ids = '01 05 06 07 s01 s02 s03 s04 s05 s06 s07 s08 s09 s10'.split(' ')
+    api.env.hosts = []
+    for id_ in ids:
+        if id_.startswith('s'):
+            host = 'server{}'.format(id_[len('s'):])
+        else:
+            host = 'gserver{}'.format(id_)
+        api.env.hosts.append(host)
+
+
+@task
+def clone_repo(path=GIT_ROOT.rstrip('/'), url='repo_url'):
+    api.run('mkdir -p %s' % os.path.dirname(path.rstrip('/')))
+    api.sudo('git clone {url} {path}'.format(url=url, path=path))
+
+
+@task
+@with_cd_to_git_root
+def update():
+    api.sudo('git pull origin master')
+
+
+@task
+@with_cd_to_git_root
+def run():
+    api.sudo("bash -c 'OMP_NUM_THREADS=1 nohup python service.py > %s/logs.txt 2>&1&'" % GIT_ROOT)
+
+
+@task
+@with_cd_to_git_root
+def stop():
+    template = 'curl --silent "http://%s:8888/%s" > /dev/null'
+    for cmd in 'stop quit'.split():
+        api.local(template % (api.env.host_string, cmd))
+
+
+@task
+@with_cd_to_git_root
+def force_stop():
+    api.sudo('pkill --signal 9 -f "^python service.py"')
+
+
+@task
+@with_cd_to_git_root
+def error():
+    count = api.sudo('grep ERROR logs.txt | wc -l')
+    msg = 'On {} counted {} errors'.format(api.env.host_string, count)
+    print(red(msg))
+
+
+@task
+def check():
+    current_host = api.env.host_string
+    host_url = '"http://%s:8888"' % current_host
+    cmd = "curl -I %s 2>/dev/null | head -n 1 | cut -d$' ' -f2" % host_url
+    code = api.local(cmd, capture=True)
+
+    if code == '200':
+        msg = '%s is alive' % current_host
+        print(green(msg))
+    else:
+        msg = '%s is not working' % current_host
+        print(red(msg))
+
+
+@task
+@with_cd_to('/var/local/logs/service')
+def grepout(pattern, timestamp):
+    output = api.sudo('grep %s service_%s.log' % (pattern, timestamp))
+    print(output)
