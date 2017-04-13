@@ -110,10 +110,3 @@ def check():
     else:
         msg = '%s is not working' % current_host
         print(red(msg))
-
-
-@task
-@with_cd_to('/var/local/logs/service')
-def grepout(pattern, timestamp):
-    output = api.sudo('grep %s service_%s.log' % (pattern, timestamp))
-    print(output)
