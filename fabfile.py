@@ -17,7 +17,7 @@ from fabric_utils import local
 from fabric_utils.rabbit import manage_rabbitmq, wait_rabbit_for_start
 
 
-GIT_ROOT = os.getenv('GIT_ROOT', '/var/local/service')
+GIT_ROOT = os.getenv('GIT_ROOT', os.path.abspath('.'))
 DATA_PATH = os.path.join(GIT_ROOT, 'data')
 
 sys.path.insert(0, GIT_ROOT)

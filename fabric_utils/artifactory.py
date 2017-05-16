@@ -1,5 +1,4 @@
 import os
-import shutil
 import tarfile
 from StringIO import StringIO
 from multiprocessing import cpu_count
@@ -43,7 +42,7 @@ def _put(resp, local_path_obj):
             path = os.path.join(local_path_obj.folder, local_path_obj.file)
             with open(path, 'wb') as f:
                 resp.raw.decode_content = True
-                shutil.copyfileobj(resp.raw, f)
+                f.write(resp.content)
     except Exception as e:
         return e
 
