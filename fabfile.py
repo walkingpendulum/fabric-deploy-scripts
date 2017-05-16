@@ -4,9 +4,10 @@ import glob
 import importlib
 import os
 import sys
-from collections import namedtuple
+from collections import namedtuple, defaultdict
 from functools import wraps
 
+import yaml
 from fabric import api
 from fabric.colors import green, red
 from fabric.context_managers import cd
@@ -157,15 +158,23 @@ def _build_worker_to_models_mapping():
 
 def _collect_tasks_for_models_loading():
     worker_to_models_mapping = _build_worker_to_models_mapping()
+
+    try:
+        with open('artifactory_model_tags.yml') as f:
+            custom_tags_table = yaml.load(f.read())
+    except IOError:
+        custom_tags_table = defaultdict(lambda: defaultdict(str))
+
     tasks = []
     for worker, models_registry in worker_to_models_mapping.items():
         for model_name, tag in models_registry.tags.items():
+            custom_tag = custom_tags_table[worker][model_name]
             cls = models_registry[model_name]
             url = '{prefix}/models/{worker}/{model}-{tag}.tar.gz'.format(
                 prefix=artifactory.ARTIFACTORY_PREFIX,
                 worker=worker,
                 model=cls.model_src_name,
-                tag=tag,
+                tag=custom_tag or tag,
             )
             dst_folder = os.path.join(DATA_PATH, worker, 'models', cls.model_src_name)
 
@@ -193,6 +202,15 @@ def _load_features():
     if exception or response.status_code != 200:
         msg = '"Data/" download failed! %s' % ' '.join([str(response), exception or ''])
         error_print(msg)
+
+
+@task
+@with_cd_to_git_root
+def collect_tags_table():
+    models_tree = _build_worker_to_models_mapping()
+    _table = {worker_name: registry.tags for worker_name, registry in models_tree.items()}
+    with open('artifactory_model_tags.yml', 'w') as f:
+        yaml.dump(_table, stream=f, indent=4, default_flow_style=False)
 
 
 @task
