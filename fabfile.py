@@ -1,3 +1,4 @@
+# coding: utf-8
 from __future__ import print_function
 
 import glob
@@ -20,6 +21,7 @@ from fabric_utils.rabbit import manage_rabbitmq, wait_rabbit_for_start
 
 GIT_ROOT = os.getenv('GIT_ROOT', os.path.abspath('.'))
 DATA_PATH = os.path.join(GIT_ROOT, 'data')
+ARTIFACTORY_MODEL_TAGS_TABLE_PATH = 'artifactory_model_tags.yml'
 
 sys.path.insert(0, GIT_ROOT)
 
@@ -145,7 +147,7 @@ def _load_vertica_driver():
         error_print(msg)
 
 
-def _build_worker_to_models_mapping():
+def _build_worker_to_registry_mapping():
     packages = glob.glob(os.path.join('service', '*', 'models'))
     worker_to_models_mapping = {}
     for path in packages:
@@ -157,24 +159,21 @@ def _build_worker_to_models_mapping():
 
 
 def _collect_tasks_for_models_loading():
-    worker_to_models_mapping = _build_worker_to_models_mapping()
+    worker_to_registry_mapping = _build_worker_to_registry_mapping()
+    api.execute(update_tags_table, worker_to_registry_mapping)
 
-    try:
-        with open('artifactory_model_tags.yml') as f:
-            custom_tags_table = yaml.load(f.read())
-    except IOError:
-        custom_tags_table = defaultdict(lambda: defaultdict(str))
+    with open(ARTIFACTORY_MODEL_TAGS_TABLE_PATH) as f:
+        tags_table = yaml.load(f.read())
 
     tasks = []
-    for worker, models_registry in worker_to_models_mapping.items():
-        for model_name, tag in models_registry.tags.items():
-            custom_tag = custom_tags_table[worker][model_name]
-            cls = models_registry[model_name]
+    for worker, model_name_to_tag_mapping in tags_table.items():
+        for model_name, tag in model_name_to_tag_mapping.items():
+            cls = worker_to_registry_mapping[worker][model_name]
             url = '{prefix}/models/{worker}/{model}-{tag}.tar.gz'.format(
                 prefix=artifactory.ARTIFACTORY_PREFIX,
                 worker=worker,
                 model=cls.model_src_name,
-                tag=custom_tag or tag,
+                tag=tag,
             )
             dst_folder = os.path.join(DATA_PATH, worker, 'models', cls.model_src_name)
 
@@ -206,16 +205,38 @@ def _load_features():
 
 @task
 @with_cd_to_git_root
-def collect_tags_table():
-    models_tree = _build_worker_to_models_mapping()
-    _table = {worker_name: registry.tags for worker_name, registry in models_tree.items()}
-    with open('artifactory_model_tags.yml', 'w') as f:
-        yaml.dump(_table, stream=f, indent=4, default_flow_style=False)
+def update_tags_table(worker_to_registry_mapping=None):
+    worker_to_registry_mapping = worker_to_registry_mapping or _build_worker_to_registry_mapping()
+
+    new_table = {
+        worker: {
+            model_name: 'latest' for model_name in registry.external_source_dependent_models
+        } for worker, registry in worker_to_registry_mapping.items()
+    }
+
+    if os.path.exists(ARTIFACTORY_MODEL_TAGS_TABLE_PATH):
+        with open(ARTIFACTORY_MODEL_TAGS_TABLE_PATH) as f:
+            old_table = yaml.load(f.read())
+    else:
+        old_table = {}
+
+    _table = defaultdict(dict)
+    # добавляем недостающие ключи из новой таблицы, НЕ ИЗМЕНЯЯ СТАРЫХ
+    # и удаляем ключи, которых нету в новой
+    for worker, model_to_tag_mapping in new_table.items():
+        for model_name, new_tag in model_to_tag_mapping.items():
+            _table[worker][model_name] = old_table.get(worker, {}).get(model_name, new_tag)
+
+    with open(ARTIFACTORY_MODEL_TAGS_TABLE_PATH, 'w') as f:
+        yaml.dump(new_table, stream=f, indent=4, default_flow_style=False)
 
 
 @task
 @with_cd_to_git_root
 def load_artifacts():
+    if not os.path.exists(ARTIFACTORY_MODEL_TAGS_TABLE_PATH):
+        api.execute(update_tags_table)
+
     _load_vertica_driver()
     _load_features()
     _load_models_data()
