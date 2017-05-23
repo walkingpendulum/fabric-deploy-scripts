@@ -27,14 +27,52 @@ sys.path.insert(0, GIT_ROOT)
 
 _LocalPath = namedtuple('LocalPath', ['folder', 'file'])
 
+api.env.use_ssh_config = True
+api.env.sudo_user = 'user'
+
 
 # noinspection PyPep8Naming
 def LocalPath(folder, file=None):
     return _LocalPath(folder, file)
 
 
-api.env.use_ssh_config = True
-api.env.sudo_user = 'user'
+class all_hosts_container(object):
+    _ids = '01 05 06 07 s01 s02 s03 s04 s05 s06 s07 s08 s09 s10'
+
+    @classmethod
+    def get_host(cls, id_):
+        if id_.startswith('s'):
+            host = 'server{}'.format(id_[len('s'):])
+        else:
+            # host = 'gserver{}'.format(id_)
+            host = 'lserver{}'.format(id_)
+
+        return host
+
+    @classmethod
+    def get_hosts(cls, *selectors):
+        if selectors:
+            selectors = set(selectors).__contains__
+        ids = filter(selectors or None, cls._ids.split(' '))
+
+        hosts = map(cls.get_host, ids)
+        return hosts
+
+
+all_hosts = all_hosts_container.get_hosts
+
+
+def task_with_hosts(task_):
+    @task
+    @wraps(task_)
+    def enhanced_with_hosts_task(*selectors):
+        hosts = all_hosts(*selectors)
+        if not hosts:
+            raise AssertionError('There are no hosts stayed after hosts processing routine, please check hosts input')
+        api.env.hosts = hosts
+        api.execute(task_)
+
+    return enhanced_with_hosts_task
 
 
 def error_print(msg, **kwargs):
@@ -69,51 +107,45 @@ def clean():
     local('docker-compose down')
 
 
-@task
-def all_hosts():
-    ids = '01 05 06 07 s01 s02 s03 s04 s05 s06 s07 s08 s09 s10'.split(' ')
-    api.env.hosts = []
-    for id_ in ids:
-        if id_.startswith('s'):
-            host = 'server{}'.format(id_[len('s'):])
-        else:
-            host = 'gserver{}'.format(id_)
-        api.env.hosts.append(host)
+@task_with_hosts
+def clone_repo(path=GIT_ROOT, url='repo_url'):
+    api.run('mkdir -p %s' % path)
+    assert len(path) > 5
+    api.run('rm -rf %s' % path)
 
-
-@task
-def clone_repo(path=GIT_ROOT.rstrip('/'), url='repo_url'):
-    api.run('mkdir -p %s' % os.path.dirname(path.rstrip('/')))
     api.sudo('git clone {url} {path}'.format(url=url, path=path))
 
 
-@task
+@task_with_hosts
 @with_cd_to_git_root
 def update():
     api.sudo('git pull origin master')
 
 
-@task
+@task_with_hosts
 @with_cd_to_git_root
 def run():
-    api.sudo("bash -c 'OMP_NUM_THREADS=1 nohup python service.py > %s/logs.txt 2>&1&'" % GIT_ROOT)
+    _cmd = 'OMP_NUM_THREADS=1 nohup python service.py &> logs.txt &'
+    cmd = "bash -c '%s'" % _cmd
+    api.run(cmd, pty=False)
 
 
-@task
+@task_with_hosts
 @with_cd_to_git_root
 def stop():
-    template = 'curl --silent "http://%s:8888/%s" > /dev/null'
-    for cmd in 'stop quit'.split():
-        api.local(template % (api.env.host_string, cmd))
+    with api.warn_only():
+        template = 'curl --silent "http://%s:8888/%s" > /dev/null'
+        for cmd in 'stop quit'.split():
+            api.local(template % (api.env.host_string, cmd))
 
 
-@task
+@task_with_hosts
 @with_cd_to_git_root
 def force_stop():
     api.sudo('pkill --signal 9 -f "^python service.py"')
 
 
-@task
+@task_with_hosts
 @with_cd_to_git_root
 def error():
     count = api.sudo('grep ERROR logs.txt | wc -l')
@@ -121,7 +153,7 @@ def error():
     error_print(msg)
 
 
-@task
+@task_with_hosts
 def check():
     current_host = api.env.host_string
     host_url = '"http://%s:8888"' % current_host
@@ -240,3 +272,16 @@ def load_artifacts():
     _load_vertica_driver()
     _load_features()
     _load_models_data()
+
+
+@task_with_hosts
+def deploy():
+    api.execute(stop)
+    api.execute(clone_repo)
+
+    update_tags_table()
+    api.put(ARTIFACTORY_MODEL_TAGS_TABLE_PATH, GIT_ROOT)
+    with api.cd(GIT_ROOT):
+        api.run('fab load_artifacts')
+
+    api.execute(run)
