@@ -44,8 +44,7 @@ class all_hosts_container(object):
         if id_.startswith('s'):
             host = 'server{}'.format(id_[len('s'):])
         else:
-            # host = 'gserver{}'.format(id_)
-            host = 'lserver{}'.format(id_)
+            host = 'gserver{}'.format(id_)
 
         return host
 
