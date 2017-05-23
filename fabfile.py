@@ -278,8 +278,9 @@ def deploy():
     api.execute(stop)
     api.execute(clone_repo)
 
-    update_tags_table()
-    api.put(ARTIFACTORY_MODEL_TAGS_TABLE_PATH, GIT_ROOT)
+    if os.path.exists(ARTIFACTORY_MODEL_TAGS_TABLE_PATH):
+        api.put(ARTIFACTORY_MODEL_TAGS_TABLE_PATH, GIT_ROOT)
+
     with api.cd(GIT_ROOT):
         api.run('fab load_artifacts')
 
