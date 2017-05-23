@@ -4,7 +4,7 @@
 """
 import argparse
 import subprocess
-
+import os
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-f", "--file", dest='filename', required=True)
@@ -12,12 +12,13 @@ parser.add_argument("-d", "--worker", dest='worker_name', required=True)
 args = parser.parse_args()
 
 credentials = "user:password"
-archive_name = args.filename
+archive_path = args.filename
+archive_file_name = os.path.basename(archive_path)
 worker_name = args.worker_name
 
-header = "X-Checksum-Sha1:$(sha1sum %s | cut -d ' ' -f1 )" % archive_name
-url = 'artifactory_prefix/%s/%s' % (worker_name, archive_name)
-cmd = '''curl -s -u "%s"  -H "%s" -T "%s" "%s"''' % (credentials, header, archive_name, url)
+header = "X-Checksum-Sha1:$(sha1sum %s | cut -d ' ' -f1 )" % archive_path
+url = 'artifactory_prefix/%s/%s' % (worker_name, archive_file_name)
+cmd = '''curl -s -u "%s"  -H "%s" -T "%s" "%s"''' % (credentials, header, archive_path, url)
 
 # uncomment line below and comment second line for manual testing
 # print cmd
