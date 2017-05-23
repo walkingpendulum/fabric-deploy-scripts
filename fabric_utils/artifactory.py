@@ -1,3 +1,4 @@
+import logging
 import os
 import tarfile
 from StringIO import StringIO
@@ -10,6 +11,15 @@ from requests.auth import HTTPBasicAuth
 from default_settings import artifactory as artifactory_settings
 
 ARTIFACTORY_PREFIX = os.getenv('SERVICE_ARTIFACTORY_PREFIX', 'http://artifactory/service-local')
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+ch = logging.StreamHandler()
+ch.setLevel(logging.INFO)
+formatter = logging.Formatter('%(threadName)s %(levelname)s: %(message)s')
+ch.setFormatter(formatter)
+logger.addHandler(ch)
 
 
 def get_num_threads():
@@ -68,6 +78,7 @@ def _fetch_url(url, local_path_obj):
         resp.url = url
     else:
         exception = _put(resp, local_path_obj)
+        logger.info("Finish task %s with %s" % (url, resp))
 
     return resp, exception
 
