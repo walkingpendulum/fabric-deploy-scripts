@@ -302,6 +302,5 @@ def deploy():
 
     with api.cd(GIT_ROOT):
         api.run('fab load_artifacts')
-        api.sudo('chown -R {user} {folder}'.format(user=api.env.sudo_user, folder=DATA_PATH))
 
     _run()
