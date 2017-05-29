@@ -107,7 +107,11 @@ def clean():
 
 
 @task_with_hosts
-def clone_repo(path=GIT_ROOT, url='repo_url'):
+def clone_repo():
+    _clone_repo()
+
+
+def _clone_repo(path=GIT_ROOT, url='repo_url'):
     api.run('mkdir -p %s' % path)
     assert len(path) > 5
     api.run('rm -rf %s' % path)
@@ -124,14 +128,21 @@ def update():
 @task_with_hosts
 @with_cd_to_git_root
 def run():
+    _run()
+
+
+def _run():
     _cmd = 'OMP_NUM_THREADS=1 nohup python service.py &> logs.txt &'
     cmd = "bash -c '%s'" % _cmd
     api.run(cmd, pty=False)
 
 
 @task_with_hosts
-@with_cd_to_git_root
 def stop():
+    _stop()
+
+
+def _stop():
     with api.warn_only():
         template = 'curl --silent "http://%s:8888/%s" > /dev/null'
         for cmd in 'stop quit'.split():
@@ -139,7 +150,6 @@ def stop():
 
 
 @task_with_hosts
-@with_cd_to_git_root
 def force_stop():
     api.sudo('pkill --signal 9 -f "^python service.py"')
 
@@ -191,7 +201,7 @@ def _build_worker_to_registry_mapping():
 
 def _collect_tasks_for_models_loading():
     worker_to_registry_mapping = _build_worker_to_registry_mapping()
-    api.execute(update_tags_table, worker_to_registry_mapping)
+    _update_tags_table(worker_to_registry_mapping)
 
     with open(ARTIFACTORY_MODEL_TAGS_TABLE_PATH) as f:
         tags_table = yaml.load(f.read())
@@ -244,9 +254,7 @@ def _load_wordforms():
         error_print(msg)
 
 
-@task
-@with_cd_to_git_root
-def update_tags_table(worker_to_registry_mapping=None):
+def _update_tags_table(worker_to_registry_mapping=None):
     worker_to_registry_mapping = worker_to_registry_mapping or _build_worker_to_registry_mapping()
 
     new_table = {
@@ -276,7 +284,7 @@ def update_tags_table(worker_to_registry_mapping=None):
 @with_cd_to_git_root
 def load_artifacts():
     if not os.path.exists(ARTIFACTORY_MODEL_TAGS_TABLE_PATH):
-        api.execute(update_tags_table)
+        _update_tags_table()
 
     _load_vertica_driver()
     _load_features()
@@ -286,8 +294,8 @@ def load_artifacts():
 
 @task_with_hosts
 def deploy():
-    api.execute(stop)
-    api.execute(clone_repo)
+    _stop()
+    _clone_repo()
 
     if os.path.exists(ARTIFACTORY_MODEL_TAGS_TABLE_PATH):
         api.put(ARTIFACTORY_MODEL_TAGS_TABLE_PATH, GIT_ROOT)
@@ -295,4 +303,4 @@ def deploy():
     with api.cd(GIT_ROOT):
         api.run('fab load_artifacts')
 
-    api.execute(run)
+    _run()
