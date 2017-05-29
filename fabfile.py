@@ -236,7 +236,7 @@ def _load_features():
 
 def _load_wordforms():
     url = '%s/common/wordforms-latest.tar.gz' % artifactory.ARTIFACTORY_PREFIX
-    folder = os.path.abspath(os.path.join('.', 'data', 'common'))
+    folder = os.path.abspath(os.path.join('.', 'data', 'common', 'wordforms'))
     local_path_obj = LocalPath(folder)
     (response, exception), = artifactory.load_artifacts([(url, local_path_obj)])
     if exception or response.status_code != 200:
