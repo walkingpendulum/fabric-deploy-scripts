@@ -112,9 +112,9 @@ def clone_repo():
 
 
 def _clone_repo(path=GIT_ROOT, url='repo_url'):
-    api.run('mkdir -p %s' % path)
+    api.sudo('mkdir -p %s' % path)
     assert len(path) > 5
-    api.run('rm -rf %s' % path)
+    api.sudo('rm -rf %s' % path)
 
     api.sudo('git clone {url} {path}'.format(url=url, path=path))
 
@@ -134,7 +134,7 @@ def run():
 def _run():
     _cmd = 'OMP_NUM_THREADS=1 nohup python service.py &> logs.txt &'
     cmd = "bash -c '%s'" % _cmd
-    api.run(cmd, pty=False)
+    api.sudo(cmd, pty=False)
 
 
 @task_with_hosts
@@ -151,7 +151,12 @@ def _stop():
 
 @task_with_hosts
 def force_stop():
-    api.sudo('pkill --signal 9 -f "^python service.py"')
+    _force_stop()
+
+
+def _force_stop():
+    with api.settings(warn_only=True):
+        api.sudo('pkill --signal 9 -f "^python service.py"')
 
 
 @task_with_hosts
@@ -294,13 +299,12 @@ def load_artifacts():
 
 @task_with_hosts
 def deploy():
-    _stop()
+    _force_stop()
     _clone_repo()
 
     if os.path.exists(ARTIFACTORY_MODEL_TAGS_TABLE_PATH):
         api.put(ARTIFACTORY_MODEL_TAGS_TABLE_PATH, GIT_ROOT)
 
     with api.cd(GIT_ROOT):
-        api.run('fab load_artifacts')
-
-    _run()
+        api.run('sudo -u user fab load_artifacts')
+        _run()
