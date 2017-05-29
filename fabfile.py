@@ -234,6 +234,16 @@ def _load_features():
         error_print(msg)
 
 
+def _load_wordforms():
+    url = '%s/common/wordforms-latest.tar.gz.tar.gz' % artifactory.ARTIFACTORY_PREFIX
+    folder = os.path.abspath(os.path.join('.', 'data', 'common'))
+    local_path_obj = LocalPath(folder)
+    (response, exception), = artifactory.load_artifacts([(url, local_path_obj)])
+    if exception or response.status_code != 200:
+        msg = '"common/wordforms" download failed! %s' % ' '.join([str(response), exception or ''])
+        error_print(msg)
+
+
 @task
 @with_cd_to_git_root
 def update_tags_table(worker_to_registry_mapping=None):
@@ -270,6 +280,7 @@ def load_artifacts():
 
     _load_vertica_driver()
     _load_features()
+    _load_wordforms()
     _load_models_data()
 
 
