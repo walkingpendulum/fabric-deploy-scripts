@@ -290,6 +290,8 @@ def load_artifacts():
     _load_features()
     _load_wordforms()
     _load_models_data()
+    with api.cd(GIT_ROOT):
+        api.sudo('chown -R {user} {folder}'.format(user=api.env.sudo_user, folder=DATA_PATH))
 
 
 @task_with_hosts
