@@ -69,7 +69,7 @@ def collect_tasks():
     tasks.extend(map(
         lambda (template, path): (
             template % artifactory.ARTIFACTORY_PREFIX,
-            os.path.join(DATA_PATH, path)
+            LocalPath(os.path.join(DATA_PATH, path))
         ),
         _tasks
     ))
