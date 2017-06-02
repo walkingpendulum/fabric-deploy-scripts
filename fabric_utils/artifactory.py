@@ -67,9 +67,6 @@ def _fetch_url(url, local_path_obj):
     """
     auth = HTTPBasicAuth(**artifactory_settings['credentials'])
 
-    # url = 'artifactory_prefix/test.tar.gz'
-    # dst_folder = "test_tar_dir"
-
     try:
         resp = requests.get(url, auth=auth)
     except requests.RequestException as e:
@@ -87,6 +84,6 @@ def load_artifacts(url_to_folder_mapping_list):
     num_threads = get_num_threads()
 
     pool = ThreadPool(processes=num_threads)
-    responses = pool.map(lambda args: _fetch_url(*args), url_to_folder_mapping_list)
-    return responses
+    results = pool.map(lambda args: _fetch_url(*args), url_to_folder_mapping_list)
+    return results
 
