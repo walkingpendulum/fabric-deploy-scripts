@@ -19,6 +19,11 @@ api.env.use_ssh_config = True
 api.env.sudo_user = 'user'
 
 
+@task
+def set_branch(branch):
+    api.env.git_branch = branch
+
+
 def error_print(msg, **kwargs):
     print(red(msg), **kwargs)
 
@@ -28,12 +33,14 @@ def clone_repo():
     _clone_repo()
 
 
-def _clone_repo(path=GIT_ROOT, url='repo_url'):
+def _clone_repo(path=GIT_ROOT, url='repo_url', branch=None):
     api.sudo('mkdir -p %s' % path)
     assert len(path) > 5
     api.sudo('rm -rf %s' % path)
 
-    api.sudo('git clone {url} {path}'.format(url=url, path=path))
+    branch = branch or api.env.git_branch or 'master'
+    with api.hide('output'):
+        api.sudo('git clone -b {branch} {url} {path}'.format(url=url, path=path, branch=branch))
 
 
 @task_with_shortened_hosts
