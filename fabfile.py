@@ -56,18 +56,6 @@ def _run():
 
 
 @task_with_shortened_hosts
-def stop():
-    _stop()
-
-
-def _stop():
-    with api.warn_only():
-        template = 'curl --silent "http://%s:8888/%s" > /dev/null'
-        for cmd in 'stop quit'.split():
-            api.local(template % (api.env.host_string, cmd))
-
-
-@task_with_shortened_hosts
 def force_stop():
     _force_stop()
 
