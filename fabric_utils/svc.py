@@ -9,13 +9,22 @@ from fabric_utils.models import build_worker_to_registry_mapping
 from fabric_utils.paths import ARTIFACTORY_MODEL_TAGS_TABLE_PATH, GIT_ROOT
 
 
-def git_info():
-    with api.cd(GIT_ROOT):
-        api.sudo('git fetch')
-        lines = api.run('git branch -vv')
-        info_str_ = next(line[len('* '):] for line in lines.split('\n') if line.startswith('* '))
+class GitTreeHandler(object):
+    @staticmethod
+    def info():
+        with api.cd(GIT_ROOT):
+            api.sudo('git fetch')
+            lines = api.run('git branch -vv')
+            info_str_ = next(line[len('* '):] for line in lines.split('\n') if line.startswith('* '))
 
-    return info_str_
+        return info_str_
+
+    @staticmethod
+    def is_index_empty():
+        with api.cd(GIT_ROOT), api.settings(warn_only=True):
+            result = api.run("git diff-files --quiet")
+
+        return not result.return_code
 
 
 def update_tags_table(worker_to_registry_mapping=None):

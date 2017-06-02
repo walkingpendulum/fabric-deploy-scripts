@@ -13,7 +13,7 @@ from fabric_utils.context_managers import with_cd_to_git_root
 from fabric_utils.decorators import task_with_shortened_hosts, get_hosts_from_shorts
 from fabric_utils.delivery_tasks import collect_tasks
 from fabric_utils.paths import GIT_ROOT, ARTIFACTORY_MODEL_TAGS_TABLE_PATH
-from fabric_utils.svc import git_info as git_info_routine, update_tags_table as update_tags_table_routine
+from fabric_utils.svc import GitTreeHandler as git, update_tags_table as update_tags_table_routine
 
 api.env.use_ssh_config = True
 api.env.sudo_user = 'user'
@@ -130,6 +130,31 @@ def deploy():
         _run()
 
 
+def _render_git_info(host_to_info_str_mapping, host_to_dirty_index_flag):
+    info = collections.defaultdict(list)
+    for host, info_str in host_to_info_str_mapping.items():
+        info[info_str].append(host)
+
+    dirty_postfix = lambda x: '(changes not staged for commit presented)' if host_to_dirty_index_flag[x] else ''
+    render_line = lambda host: ' '.join([host, dirty_postfix(host)])
+
+    for info_str, _hosts in info.items():
+        _sorted_hosts_lines = sorted(_hosts, key=lambda h: (host_to_dirty_index_flag[h], h))
+        hosts_lines = '\n\t'.join([render_line(line) for line in _sorted_hosts_lines])
+
+        msg = (
+            "Hosts:\n\t"
+                "{hosts_lines}\n"
+            "Git info:\n\t"
+                "{git_info}\n"
+        ).format(
+            hosts_lines=hosts_lines,
+            git_info=info_str
+        )
+
+        print(msg)
+
+
 @task
 def code_version(*selectors):
     hosts_to_run = get_hosts_from_shorts(selectors)
@@ -137,15 +162,17 @@ def code_version(*selectors):
     @task
     @parallel
     def _code_version():
-        info_str = git_info_routine()
+        info_str = git.info()
         return info_str
+
+    @task
+    @parallel
+    def _git_dirty_index():
+        flag = not git.is_index_empty()
+        return flag
 
     with api.hide('everything'):
         host_to_info_str_mapping = api.execute(_code_version, hosts=hosts_to_run)
+        host_to_dirty_index_flag = api.execute(_git_dirty_index, hosts=hosts_to_run)
 
-    info = collections.defaultdict(list)
-    for host, info_str in host_to_info_str_mapping.items():
-        info[info_str].append(host)
-
-    for info_str, hosts in info.items():
-        print("Hosts: \n\t%s\nGit info: \n\t%s\n" % ('\n\t'.join(sorted(hosts)), info_str))
+    _render_git_info(host_to_info_str_mapping, host_to_dirty_index_flag)
