@@ -110,7 +110,9 @@ def load_artifacts():
     task_results = artifactory.load_artifacts(tasks)
     failed_results = filter(lambda (resp, exc): exc or resp.status_code != 200, task_results)
     if failed_results:
-        _msg = lambda r, e: 'Download {.url} failed with {details}'.format(r, details=' '.join([str(r), e or '']))
+        _msg = lambda r, e: 'Download {.url} failed with {details}'.format(
+            r, details=' '.join([str(r), str(e) if e else ''])
+        )
         msg = '\n'.join([_msg(*result) for result in failed_results])
         error_print(msg)
 
