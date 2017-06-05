@@ -8,12 +8,14 @@ from fabric import api
 from fabric.colors import green, red
 from fabric.decorators import task, parallel
 
-import fabric_utils.artifactory as artifactory
+import fabric_utils.artifactory_loader as artifactory_loader
 from fabric_utils.context_managers import with_cd_to_git_root
 from fabric_utils.decorators import task_with_shortened_hosts, get_hosts_from_shorts
 from fabric_utils.delivery_tasks import collect_tasks
 from fabric_utils.paths import GIT_ROOT, ARTIFACTORY_MODEL_TAGS_TABLE_PATH
-from fabric_utils.svc import GitTreeHandler as git, update_tags_table as update_tags_table_routine
+from fabric_utils.svc import ArtifactoryTreeHandler as artifactory
+from fabric_utils.svc import GitTreeHandler as git
+from fabric_utils.svc import update_tags_table as update_tags_table_routine
 
 api.env.use_ssh_config = True
 api.env.sudo_user = 'user'
@@ -30,16 +32,18 @@ def error_print(msg, **kwargs):
 
 @task_with_shortened_hosts
 def clone_repo():
-    _clone_repo()
+    _clone_or_pull_repo()
 
 
-def _clone_repo(path=GIT_ROOT, url='repo_url', branch=None):
-    api.sudo('mkdir -p %s' % path)
-    assert len(path) > 5
-    api.sudo('rm -rf %s' % path)
+def _clone_or_pull_repo(path=GIT_ROOT, branch=None):
     branch = branch or api.env.get('git_branch', 'master')
+
     with api.hide('output'):
-        api.sudo('git clone -b {branch} {url} {path}'.format(url=url, path=path, branch=branch))
+        path_exists = not api.run('test -d %s' % path).return_code
+        if not path_exists:
+            git.clone(path, branch)
+        else:
+            git.force_pull(path, branch)
 
 
 @task_with_shortened_hosts
@@ -101,7 +105,7 @@ def load_artifacts():
         update_tags_table_routine()
 
     tasks = collect_tasks()
-    task_results = artifactory.load_artifacts(tasks)
+    task_results = artifactory_loader.load_artifacts(tasks)
     failed_results = filter(lambda (resp, exc): exc or resp.status_code != 200, task_results)
     if failed_results:
         _msg = lambda r, e: 'Download {.url} failed with {details}'.format(
@@ -109,6 +113,11 @@ def load_artifacts():
         )
         msg = '\n'.join([_msg(*result) for result in failed_results])
         error_print(msg)
+
+
+@task_with_shortened_hosts
+def invalidate_artifactory_cache():
+    artifactory.invalidate_cache()
 
 
 @task
@@ -119,7 +128,7 @@ def update_tags_table():
 @task_with_shortened_hosts
 def deploy():
     _force_stop()
-    _clone_repo()
+    _clone_or_pull_repo()
 
     if os.path.exists(ARTIFACTORY_MODEL_TAGS_TABLE_PATH):
         api.put(ARTIFACTORY_MODEL_TAGS_TABLE_PATH, GIT_ROOT)
@@ -175,3 +184,9 @@ def code_version(*selectors):
         host_to_dirty_index_flag = api.execute(_git_dirty_index, hosts=hosts_to_run)
 
     _render_git_info(host_to_info_str_mapping, host_to_dirty_index_flag)
+
+
+@task_with_shortened_hosts
+def f():
+    with api.cd(GIT_ROOT):
+        api.sudo('fab load_artifacts')

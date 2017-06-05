@@ -1,15 +1,21 @@
 # coding=utf-8
+import json
 import os
 from collections import defaultdict
 
+import requests
 import yaml
 from fabric import api
+from requests.auth import HTTPBasicAuth
 
+from default_settings import artifactory as artifactory_settings
 from fabric_utils.models import build_worker_to_registry_mapping
-from fabric_utils.paths import ARTIFACTORY_MODEL_TAGS_TABLE_PATH, GIT_ROOT
+from fabric_utils.paths import ARTIFACTORY_MODEL_TAGS_TABLE_PATH, GIT_ROOT, DATA_PATH
 
 
 class GitTreeHandler(object):
+    repo_url = 'repo_url'
+
     @staticmethod
     def info():
         with api.cd(GIT_ROOT):
@@ -25,6 +31,70 @@ class GitTreeHandler(object):
             result = api.run("git diff-files --quiet")
 
         return not result.return_code
+
+    @staticmethod
+    def clone(path, branch):
+        with api.hide('output'):
+            api.sudo('git clone -b {branch} {url} {path}'.format(
+                url=GitTreeHandler.repo_url, path=path, branch=branch
+            ))
+
+    @staticmethod
+    def force_pull(path, branch):
+        with api.cd(path):
+            api.sudo('git fetch --all')
+            api.sudo('git reset --hard origin/%s' % branch)
+
+
+class ArtifactoryTreeHandler(object):
+    prefix = 'http://artifactory'
+    api_prefix = '%s/api/storage/service-local' % prefix
+    repo_prefix = '%s/service-local' % prefix
+    info_file = 'artifactory_info.json'
+
+    @staticmethod
+    def _get(url):
+        auth = HTTPBasicAuth(**artifactory_settings['credentials'])
+        resp = requests.get(url, auth=auth)
+
+        return resp
+
+    @staticmethod
+    def load(uri):
+        url = '%s/%s' % (ArtifactoryTreeHandler.repo_prefix, uri)
+        resp = ArtifactoryTreeHandler._get(url)
+
+        return resp
+
+    @staticmethod
+    def info(uri):
+        url = '%s/%s' % (ArtifactoryTreeHandler.api_prefix, uri)
+        resp = ArtifactoryTreeHandler._get(url).json()
+
+        return resp
+
+    @staticmethod
+    def check_if_loading_needed(uri, local_path_obj):
+        try:
+            with open(os.path.join(local_path_obj.folder, ArtifactoryTreeHandler.info_file)) as f:
+                old_info = json.load(f)
+        except (IOError, OSError):
+            return True
+
+        info = ArtifactoryTreeHandler.info(uri)
+
+        return info['lastUpdated'] > old_info['lastUpdated']
+
+    @staticmethod
+    def dump_info(uri, local_path_obj):
+        info = ArtifactoryTreeHandler.info(uri)
+        with open(os.path.join(local_path_obj.folder, ArtifactoryTreeHandler.info_file), 'w') as f:
+            json.dump(obj=info, fp=f)
+
+    @staticmethod
+    def invalidate_cache():
+        with api.cd(DATA_PATH):
+            api.run('find . -name "%s" -type f -delete' % ArtifactoryTreeHandler.info_file)
 
 
 def update_tags_table(worker_to_registry_mapping=None):
