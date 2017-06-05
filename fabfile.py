@@ -37,8 +37,7 @@ def _clone_repo(path=GIT_ROOT, url='repo_url', branch=None):
     api.sudo('mkdir -p %s' % path)
     assert len(path) > 5
     api.sudo('rm -rf %s' % path)
-
-    branch = branch or api.env.git_branch or 'master'
+    branch = branch or api.env.get('git_branch', 'master')
     with api.hide('output'):
         api.sudo('git clone -b {branch} {url} {path}'.format(url=url, path=path, branch=branch))
 
