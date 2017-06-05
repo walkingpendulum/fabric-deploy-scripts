@@ -184,9 +184,3 @@ def code_version(*selectors):
         host_to_dirty_index_flag = api.execute(_git_dirty_index, hosts=hosts_to_run)
 
     _render_git_info(host_to_info_str_mapping, host_to_dirty_index_flag)
-
-
-@task_with_shortened_hosts
-def f():
-    with api.cd(GIT_ROOT):
-        api.sudo('fab load_artifacts')
