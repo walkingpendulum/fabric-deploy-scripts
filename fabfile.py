@@ -26,6 +26,49 @@ def set_branch(branch):
     api.env.git_branch = branch
 
 
+# noinspection PyPep8Naming
+def LocalPath(folder, file=None):
+    return _LocalPath(folder, file)
+
+
+class all_hosts_container(object):
+    _ids = '01 05 06 07 s01 s02 s03 s04 s05 s06 s07 s08 s09 s10 s11 s12'
+
+    @classmethod
+    def get_host(cls, id_):
+        if id_.startswith('s'):
+            host = 'server{}'.format(id_[len('s'):])
+        else:
+            host = 'gserver{}'.format(id_)
+
+        return host
+
+    @classmethod
+    def get_hosts(cls, *selectors):
+        if selectors:
+            selectors = set(selectors).__contains__
+        ids = filter(selectors or None, cls._ids.split(' '))
+
+        hosts = map(cls.get_host, ids)
+        return hosts
+
+
+all_hosts = all_hosts_container.get_hosts
+
+
+def task_with_hosts(task_):
+    @task
+    @wraps(task_)
+    def enhanced_with_hosts_task(*selectors):
+        hosts = all_hosts(*selectors)
+        if not hosts:
+            raise AssertionError('There are no hosts stayed after hosts processing routine, please check hosts input')
+        api.env.hosts = hosts
+        api.execute(task_)
+
+    return enhanced_with_hosts_task
+
+
 def error_print(msg, **kwargs):
     print(red(msg), **kwargs)
 
