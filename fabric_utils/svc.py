@@ -1,7 +1,7 @@
 # coding=utf-8
 import json
 import os
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 
 import requests
 import yaml
@@ -33,17 +33,35 @@ class GitTreeHandler(object):
         return not result.return_code
 
     @staticmethod
-    def clone(path, branch):
-        with api.hide('output'):
-            api.sudo('git clone -b {branch} {url} {path}'.format(
-                url=GitTreeHandler.repo_url, path=path, branch=branch
-            ))
+    def clone(path, git_ref):
+        if git_ref.branch:
+            with api.hide('output'):
+                api.sudo('git clone -b {git_ref.branch} {repo_url} {path}'.format(
+                    repo_url=GitTreeHandler.repo_url, path=path, git_ref=git_ref
+                ))
+        elif git_ref.commit:
+            with api.hide('output'):
+                api.sudo('git clone {git.repo_url} {path}'.format(
+                    git=GitTreeHandler, path=path
+                ))
+                with api.cd(path):
+                    api.run('git checkout --detach {.commit}'.format(git_ref))
+        else:
+            raise RuntimeError
 
     @staticmethod
-    def force_pull(path, branch):
-        with api.cd(path):
-            api.sudo('git fetch --all')
-            api.sudo('git reset --hard origin/%s' % branch)
+    def force_pull(path, git_ref):
+        if git_ref.branch:
+            with api.cd(path):
+                api.sudo('git fetch --all')
+                api.sudo('git reset --hard origin/{.branch}'.format(git_ref))
+        elif git_ref.commit:
+            with api.cd(path):
+                api.sudo('git fetch --all')
+                api.run('git reset --hard HEAD')
+                api.run('git checkout --detach {.commit}'.format(git_ref))
+        else:
+            raise RuntimeError
 
 
 class ArtifactoryTreeHandler(object):

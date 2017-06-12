@@ -16,14 +16,16 @@ from fabric_utils.paths import GIT_ROOT, ARTIFACTORY_MODEL_TAGS_TABLE_PATH
 from fabric_utils.svc import ArtifactoryTreeHandler as artifactory
 from fabric_utils.svc import GitTreeHandler as git
 from fabric_utils.svc import update_tags_table as update_tags_table_routine
+from fabric_utils.utils import GitRef
+
 
 api.env.use_ssh_config = True
 api.env.sudo_user = 'user'
 
 
 @task
-def set_branch(branch):
-    api.env.git_branch = branch
+def set_git_ref(**kwargs):
+    api.env.git_ref = GitRef(**kwargs)
 
 
 # noinspection PyPep8Naming
@@ -78,15 +80,16 @@ def clone_repo():
     _clone_or_pull_repo()
 
 
-def _clone_or_pull_repo(path=GIT_ROOT, branch=None):
-    branch = branch or api.env.get('git_branch', 'master')
+def _clone_or_pull_repo(path=GIT_ROOT, git_ref=None):
+    git_ref = git_ref or api.env.get('git_ref', GitRef('master'))
 
     with api.hide('output'):
-        path_exists = not api.run('test -d %s' % path).return_code
+        with api.settings(warn_only=True):
+            path_exists = not api.run('test -d %s' % path).return_code
         if not path_exists:
-            git.clone(path, branch)
+            git.clone(path, git_ref)
         else:
-            git.force_pull(path, branch)
+            git.force_pull(path, git_ref)
 
 
 @task_with_shortened_hosts

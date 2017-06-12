@@ -1,20 +1,13 @@
 # coding: utf-8
 
 import os
-from collections import namedtuple
 
 import yaml
 
 from fabric_utils.models import build_worker_to_registry_mapping
 from fabric_utils.paths import DATA_PATH, ARTIFACTORY_MODEL_TAGS_TABLE_PATH
 from fabric_utils.svc import update_tags_table
-
-_LocalPath = namedtuple('LocalPath', ['folder', 'file'])
-
-
-# noinspection PyPep8Naming
-def LocalPath(folder, file_=None):
-    return _LocalPath(folder, file_)
+from fabric_utils.utils import LocalPath
 
 
 def _collect_tasks_for_models_loading():
