@@ -159,4 +159,4 @@ def update_tags_table(worker_to_registry_mapping=None):
             _table[worker][model_name] = old_table.get(worker, {}).get(model_name, new_tag)
 
     with open(ARTIFACTORY_MODEL_TAGS_TABLE_PATH, 'w') as f:
-        yaml.dump(new_table, stream=f, indent=4, default_flow_style=False)
+        yaml.dump(_table, stream=f, indent=4, default_flow_style=False)
