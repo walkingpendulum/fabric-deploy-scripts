@@ -111,8 +111,7 @@ class ArtifactoryTreeHandler(object):
 
     @staticmethod
     def invalidate_cache():
-        with api.cd(DATA_PATH):
-            api.run('find . -name "%s" -type f -delete' % ArtifactoryTreeHandler.info_file)
+        api.run('find %s -name "%s" -type f -delete' % (DATA_PATH, ArtifactoryTreeHandler.info_file))
 
 
 def update_tags_table(worker_to_registry_mapping=None):
