@@ -171,14 +171,18 @@ def update_tags_table():
     update_tags_table_routine()
 
 
+def _put_local_tag_table_if_exists():
+    file_name = os.path.basename(ARTIFACTORY_MODEL_TAGS_TABLE_PATH)
+    if os.path.exists(file_name):
+        api.put(file_name, GIT_ROOT)
+
+
 @task_with_shortened_hosts
 def deploy():
     _force_stop()
     _clone_or_pull_repo()
 
-    if os.path.exists(ARTIFACTORY_MODEL_TAGS_TABLE_PATH):
-        api.put(ARTIFACTORY_MODEL_TAGS_TABLE_PATH, GIT_ROOT)
-
+    _put_local_tag_table_if_exists()
     with api.cd(GIT_ROOT):
         api.sudo('fab load_artifacts')
         _run()
