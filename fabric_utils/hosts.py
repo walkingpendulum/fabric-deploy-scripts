@@ -12,8 +12,16 @@ class all_hosts_container(object):
 
     @classmethod
     def get_hosts(cls, *selectors):
-        is_choosen = None if selectors == ('all', ) else set(selectors).__contains__
+        is_choosen = None if 'all' in selectors else set(selectors).__contains__
         ids = filter(is_choosen, cls._ids.split(' '))
         hosts = map(cls.get_host, ids)
 
-        return hosts
+        exclude_host_list = []
+        exclude_selector_list = [selector[len('x'):] for selector in selectors if selector.startswith('x')]
+        if exclude_selector_list:
+            is_choosen = set(exclude_selector_list).__contains__
+            exclude_id_list = filter(is_choosen, cls._ids.split(' '))
+            exclude_host_list = map(cls.get_host, exclude_id_list)
+
+        result = sorted(list(set(hosts) - set(exclude_host_list)))
+        return result
