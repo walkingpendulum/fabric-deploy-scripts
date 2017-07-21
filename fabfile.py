@@ -8,17 +8,17 @@ from fabric.colors import green, red
 from fabric.decorators import task, parallel, serial
 
 import fabric_utils.artifactory_loader as artifactory_loader
+from default_settings import disposer_settings
 from fabric_utils.context_managers import with_cd_to_git_root
 from fabric_utils.decorators import task_with_shortened_hosts, get_hosts_from_shorts
 from fabric_utils.delivery_tasks import collect_tasks
 from fabric_utils.deploy import _run, _force_stop, _deploy, _render_git_info, _clone_or_pull_repo, error_print
 from fabric_utils.paths import ARTIFACTORY_MODEL_TAGS_TABLE_PATH
+from fabric_utils.patterns import kill_service_regex
 from fabric_utils.svc import ArtifactoryTreeHandler as artifactory
 from fabric_utils.svc import GitTreeHandler as git
 from fabric_utils.svc import update_tags_table as update_tags_table_routine
 from fabric_utils.utils import GitRef
-from default_settings import disposer_settings
-from fabric_utils.patterns import kill_service_regex
 
 api.env.use_ssh_config = True
 api.env.sudo_user = 'user'

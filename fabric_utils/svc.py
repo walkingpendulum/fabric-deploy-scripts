@@ -1,14 +1,14 @@
 # coding=utf-8
 import json
 import os
-from collections import defaultdict, namedtuple
+from collections import defaultdict
 
 import requests
 import yaml
 from fabric import api
 from requests.auth import HTTPBasicAuth
 
-from default_settings import artifactory as artifactory_settings
+from global_settings import artifactory_credentials
 from fabric_utils.models import build_worker_to_registry_mapping
 from fabric_utils.paths import ARTIFACTORY_MODEL_TAGS_TABLE_PATH, GIT_ROOT, DATA_PATH
 
@@ -72,7 +72,7 @@ class ArtifactoryTreeHandler(object):
 
     @staticmethod
     def _get(url):
-        auth = HTTPBasicAuth(**artifactory_settings['credentials'])
+        auth = HTTPBasicAuth(**artifactory_credentials)
         resp = requests.get(url, auth=auth)
 
         return resp
