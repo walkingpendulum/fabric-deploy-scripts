@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import json
 import os
+import sys
 import traceback as tb
 
 from default_settings import secrets_path
@@ -22,3 +23,12 @@ def load(secret_name, path=None):
 
     return secrets
 
+
+if __name__ == '__main__':
+    print(
+        json.dumps(
+            load(sys.argv[1]),
+            indent=4,
+            ensure_ascii=False
+        )
+    )
