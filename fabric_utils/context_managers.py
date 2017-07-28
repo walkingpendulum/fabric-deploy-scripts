@@ -11,7 +11,7 @@ def with_cd_to(path):
         @wraps(func)
         def wrapped(*args, **kwargs):
             with cd(path):
-                res = func()
+                res = func(*args, **kwargs)
                 return res
         return wrapped
     return decorator
