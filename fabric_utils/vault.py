@@ -46,6 +46,10 @@ def _check_if_token_needs_attention():
         stderr = exc.output
         if '* missing client token' in stderr:
             _vault_auth()
+        elif 'Code: 403. Errors:\n\n* permission denied' in stderr:
+            # xxx: strange way to say "token expired", Hashicorp!
+            print("Token expired!")
+            _vault_auth()
         else:
             raise
 
