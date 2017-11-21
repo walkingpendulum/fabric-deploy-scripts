@@ -1,20 +1,20 @@
 # coding: utf-8
 from __future__ import print_function
 
+import importlib
 import os
 
 from fabric import api
-from fabric.colors import green, red
 from fabric.decorators import task, parallel, serial
 
 import fabric_utils.artifactory_loader as artifactory_loader
-from default_settings import disposer_settings
 from fabric_utils.context_managers import with_cd_to_git_root
 from fabric_utils.decorators import task_with_shortened_hosts, get_hosts_from_shorts
 from fabric_utils.delivery_tasks import collect_tasks
 from fabric_utils.deploy import _run, _force_stop, _deploy, _render_git_info, _clone_or_pull_repo, error_print
-from fabric_utils.paths import ARTIFACTORY_MODEL_TAGS_TABLE_PATH
+from fabric_utils.paths import ARTIFACTORY_MODEL_TAGS_TABLE_PATH, GIT_ROOT
 from fabric_utils.patterns import kill_service_regex
+from fabric_utils.rabbit import create_queues as create_queues_routine
 from fabric_utils.svc import ArtifactoryTreeHandler as artifactory
 from fabric_utils.svc import GitTreeHandler as git
 from fabric_utils.svc import update_tags_table as update_tags_table_routine
@@ -138,13 +138,17 @@ def check(*selectors):
 
 @task
 @with_cd_to_git_root
-def load_artifacts():
-    """Загружает файлы из артифактори соогласно таблице тегов"""
+def load_artifacts(cred_str=None, worker_name_mask='*'):
+    """Загружает файлы из артифактори соогласно таблице тегов
+    :param cred_str: credentials для артифактори в формате login:password
+    :param worker_name_mask: маска для поиска папки с воркером, по умолчанию '*'
+
+    """
     if not os.path.exists(ARTIFACTORY_MODEL_TAGS_TABLE_PATH):
         update_tags_table_routine()
 
-    tasks = collect_tasks()
-    task_results = artifactory_loader.load_artifacts(tasks)
+    tasks = collect_tasks(worker_name_mask=worker_name_mask)
+    task_results = artifactory_loader.load_artifacts(tasks, cred_str)
     failed_results = filter(lambda (resp, exc): exc or resp.status_code != 200, task_results)
     if failed_results:
         _msg = lambda r, e: 'Download {.url} failed with {details}'.format(
@@ -229,3 +233,17 @@ def tail(*selectors):
 
     with api.settings(linewise=True):
         api.execute(_tail, log_file_path, hosts=hosts)
+
+
+@task
+def create_queues(rabbitmq_connection_string, path_to_job_settings):
+    """Создает очереди в реббите по connection_string и relative/path/to/job/settings (без .py)"""
+    # connection_string as 'ampq://{0[username]}:{0[password]}@{1[host]}:{1[port]:d}/{1[virtual_host]}'
+    import sys
+    sys.path.append(GIT_ROOT)
+
+    job_settings_module = importlib.import_module(path_to_job_settings.replace('/', '.'))
+
+    for name in filter(lambda name: 'job_settings' in name, vars(job_settings_module)):
+        job_settings = getattr(job_settings_module, name)
+        create_queues_routine(rabbitmq_connection_string, job_settings)

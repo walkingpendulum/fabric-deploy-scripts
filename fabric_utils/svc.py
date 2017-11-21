@@ -8,7 +8,7 @@ import yaml
 from fabric import api
 from requests.auth import HTTPBasicAuth
 
-from global_settings import artifactory_credentials
+import global_settings
 from fabric_utils.models import build_worker_to_registry_mapping
 from fabric_utils.paths import ARTIFACTORY_MODEL_TAGS_TABLE_PATH, GIT_ROOT, DATA_PATH
 
@@ -71,41 +71,44 @@ class ArtifactoryTreeHandler(object):
     info_file = 'artifactory_info.json'
 
     @staticmethod
-    def _get(url):
-        auth = HTTPBasicAuth(**artifactory_credentials)
+    def _get(url, cred_str=None):
+        if cred_str:
+            auth = HTTPBasicAuth(*cred_str.split(':'))
+        else:
+            auth = HTTPBasicAuth(**global_settings.artifactory_credentials_provider.provide_content())
         resp = requests.get(url, auth=auth)
 
         return resp
 
     @staticmethod
-    def load(uri):
+    def load(uri, cred_str):
         url = '%s/%s' % (ArtifactoryTreeHandler.repo_prefix, uri)
-        resp = ArtifactoryTreeHandler._get(url)
+        resp = ArtifactoryTreeHandler._get(url, cred_str)
 
         return resp
 
     @staticmethod
-    def info(uri):
+    def info(uri, cred_str):
         url = '%s/%s' % (ArtifactoryTreeHandler.api_prefix, uri)
-        resp = ArtifactoryTreeHandler._get(url).json()
+        resp = ArtifactoryTreeHandler._get(url, cred_str).json()
 
         return resp
 
     @staticmethod
-    def check_if_loading_needed(uri, local_path_obj):
+    def check_if_loading_needed(uri, local_path_obj, cred_str):
         try:
             with open(os.path.join(local_path_obj.folder, ArtifactoryTreeHandler.info_file)) as f:
                 old_info = json.load(f)
         except (IOError, OSError):
             return True
 
-        info = ArtifactoryTreeHandler.info(uri)
+        info = ArtifactoryTreeHandler.info(uri, cred_str)
 
         return info['lastUpdated'] > old_info['lastUpdated']
 
     @staticmethod
-    def dump_info(uri, local_path_obj):
-        info = ArtifactoryTreeHandler.info(uri)
+    def dump_info(uri, local_path_obj, cred_str):
+        info = ArtifactoryTreeHandler.info(uri, cred_str)
         with open(os.path.join(local_path_obj.folder, ArtifactoryTreeHandler.info_file), 'w') as f:
             json.dump(obj=info, fp=f)
 

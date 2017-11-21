@@ -20,8 +20,7 @@ logger.addHandler(ch)
 
 
 def get_num_threads():
-    default = min(15, int(cpu_count() / 2))
-    return os.getenv('SERVICE_NUM_THREADS', default)
+    return os.getenv('SERVICE_NUM_THREADS')
 
 
 def _put(resp, local_path_obj):
@@ -54,7 +53,7 @@ def _put(resp, local_path_obj):
         return e
 
 
-def _download_uri(uri, local_path_obj):
+def _download_uri(uri, local_path_obj, cred_str):
     """
     :param uri: 
     :param dst_folder: 
@@ -63,31 +62,31 @@ def _download_uri(uri, local_path_obj):
 
     """
     try:
-        resp = artifactory.load(uri)
+        resp = artifactory.load(uri, cred_str)
     except requests.RequestException as e:
         exception = e
         resp = requests.models.Response()
         resp.url = uri
     else:
         exception = _put(resp, local_path_obj)
-        artifactory.dump_info(uri, local_path_obj)
+        artifactory.dump_info(uri, local_path_obj, cred_str)
         logger.info("Finish task %s with %s" % (uri, resp))
 
     return resp, exception
 
 
-def _handle_task(uri, local_path_obj):
-    flag = artifactory.check_if_loading_needed(uri, local_path_obj)
+def _handle_task(uri, local_path_obj, cred_str):
+    flag = artifactory.check_if_loading_needed(uri, local_path_obj, cred_str)
     if flag:
-        task_result = _download_uri(uri, local_path_obj)
+        task_result = _download_uri(uri, local_path_obj, cred_str)
         return task_result
 
 
-def load_artifacts(uri_to_folder_mapping_list):
+def load_artifacts(uri_to_folder_mapping_list, cred_str):
     num_threads = get_num_threads()
 
     pool = ThreadPool(processes=num_threads)
-    results = pool.map(lambda args: _handle_task(*args), uri_to_folder_mapping_list)
+    results = pool.map(lambda args: _handle_task(*args, cred_str=cred_str), uri_to_folder_mapping_list)
     results = filter(None, results)
 
     return results
