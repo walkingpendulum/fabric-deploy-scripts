@@ -1,13 +1,11 @@
 from __future__ import print_function
 
 import collections
-import os
 
 from fabric import api
-from fabric.colors import red
 
 from fabric_utils.context_managers import with_cd_to_git_root
-from fabric_utils.paths import GIT_ROOT, ARTIFACTORY_MODEL_TAGS_TABLE_PATH
+from fabric_utils.paths import GIT_ROOT
 from fabric_utils.patterns import kill_service_regex
 from fabric_utils.svc import GitTreeHandler as git
 from fabric_utils.utils import GitRef
@@ -17,28 +15,27 @@ api.env.sudo_user = 'user'
 
 
 @with_cd_to_git_root
-def _run(script):
+def run_service_script(script):
     _cmd = 'OMP_NUM_THREADS=1 nohup python %s &> logs.txt &' % script
     cmd = "bash -c '%s'" % _cmd
     api.sudo(cmd, pty=False)
 
 
-def _force_stop():
+def force_stop_service_process():
     with api.settings(warn_only=True):
         api.sudo('pkill --signal 9 -f "%s"' % kill_service_regex)
 
 
-def _deploy(script='service.py'):
-    _force_stop()
-    _clone_or_pull_repo()
+def deploy_service(executable_script='service.py'):
+    force_stop_service_process()
+    clone_or_pull_service_repo()
 
-    _put_local_tag_table_if_exists()
     with api.cd(GIT_ROOT):
         api.sudo('fab load_artifacts')
-        _run(script)
+        run_service_script(executable_script)
 
 
-def _render_git_info(host_to_info_str_mapping, host_to_dirty_index_flag):
+def render_git_info(host_to_info_str_mapping, host_to_dirty_index_flag):
     info = collections.defaultdict(list)
     for host, info_str in host_to_info_str_mapping.items():
         info[info_str].append(host)
@@ -63,13 +60,7 @@ def _render_git_info(host_to_info_str_mapping, host_to_dirty_index_flag):
         print(msg)
 
 
-def _put_local_tag_table_if_exists():
-    file_name = os.path.basename(ARTIFACTORY_MODEL_TAGS_TABLE_PATH)
-    if os.path.exists(file_name):
-        api.put(file_name, GIT_ROOT)
-
-
-def _clone_or_pull_repo(path=GIT_ROOT, git_ref=None):
+def clone_or_pull_service_repo(path=GIT_ROOT, git_ref=None):
     git_ref = git_ref or api.env.get('git_ref', GitRef('master'))
 
     with api.hide('output'):
@@ -79,7 +70,3 @@ def _clone_or_pull_repo(path=GIT_ROOT, git_ref=None):
             git.clone(path, git_ref)
         else:
             git.force_pull(path, git_ref)
-
-
-def error_print(msg, **kwargs):
-    print(red(msg), **kwargs)

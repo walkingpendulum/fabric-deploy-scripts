@@ -12,7 +12,6 @@ import fabric_utils.deploy
 from fabric_utils.context_managers import with_cd_to_git_root
 from fabric_utils.decorators import task_with_shortened_hosts, get_hosts_from_shorts
 from fabric_utils.delivery_tasks import collect_tasks
-from fabric_utils.deploy import _run, _force_stop, _deploy, _render_git_info, _clone_or_pull_repo, error_print
 from fabric_utils.paths import GIT_ROOT, DATA_PATH
 from fabric_utils.patterns import kill_service_regex
 from fabric_utils.rabbit import create_queues as create_queues_routine
@@ -32,7 +31,7 @@ def set_git_ref(**kwargs):
 @task_with_shortened_hosts
 def clone_repo():
     """git clone или git reset --hard && git pull"""
-    _clone_or_pull_repo()
+    fabric_utils.deploy.clone_or_pull_service_repo()
 
 
 @task_with_shortened_hosts
@@ -46,31 +45,32 @@ def update():
 @with_cd_to_git_root
 def run():
     """Запускает service.py без деплоя или обновления)"""
-    _run(script='service.py')
+    fabric_utils.deploy.run_service_script(script='service.py')
 
 
 @task_with_shortened_hosts
 def deploy():
     """Останавливет сервис, подтягивает обновления кода и моделей, запускает service.py"""
-    _deploy(script='service.py')
+    fabric_utils.deploy.deploy_service(executable_script='service.py')
 
 
 @task_with_shortened_hosts
 def deploy_autoload():
     """То же, что и deploy, но для service-autoload.py"""
-    _deploy(script='service-autoload.py')
+    fabric_utils.deploy.deploy_service(executable_script='service-autoload.py')
 
 
 @task_with_shortened_hosts
 def deploy_autoload_check():
     """То же, что и deploy, но для service-autoload-check.py"""
-    _deploy(script='service-autoload-check.py')
+    fabric_utils.deploy.deploy_service(executable_script='service-autoload-check.py')
 
 
 @task_with_shortened_hosts
 def force_stop():
     """pkill --signal 9 -f '%s'"""
-    _force_stop()
+    fabric_utils.deploy.force_stop_service_process()
+
 
 force_stop.__doc__ %= kill_service_regex
 
@@ -93,44 +93,6 @@ def error(*selectors):
     lines = []
     for host, counter in sorted(host_to_counter_mapping.items(), key=lambda (h, c): h):
         lines.append('On {} counted {} errors'.format(host, counter))
-
-    print('\n'.join(lines))
-
-
-@task
-@serial
-def check(*selectors):
-    """Выполняет health check на хостах"""
-
-    _opts = [
-        '-s',
-        '-I',
-        '-o /dev/null',
-        '-w "%{http_code}"'
-    ]
-
-    cmd = "curl {opts} {disposer[host]}:{disposer[port]}".format(
-        opts=' '.join(_opts),
-        disposer=disposer_settings['webserver']
-    )
-
-    @task
-    @parallel
-    def get_http_code():
-        return api.sudo(cmd)
-
-    hosts = get_hosts_from_shorts(selectors)
-    with api.hide('everything'):
-        host_to_code_mapping = api.execute(get_http_code, hosts=hosts)
-
-    lines = []
-    for host, code in sorted(host_to_code_mapping.items(), key=lambda (h, c): h):
-        if code == '200':
-            msg = green('%s is alive' % host)
-            lines.append(msg)
-        else:
-            msg = red('%s is not working' % host)
-            lines.append(msg)
 
     print('\n'.join(lines))
 
@@ -179,7 +141,7 @@ def code_version(*selectors):
         host_to_info_str_mapping = api.execute(_code_version, hosts=hosts_to_run)
         host_to_dirty_index_flag = api.execute(_git_dirty_index, hosts=hosts_to_run)
 
-    _render_git_info(host_to_info_str_mapping, host_to_dirty_index_flag)
+    fabric_utils.deploy.render_git_info(host_to_info_str_mapping, host_to_dirty_index_flag)
 
 
 @task
