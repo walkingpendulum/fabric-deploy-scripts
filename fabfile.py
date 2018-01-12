@@ -2,22 +2,21 @@
 from __future__ import print_function
 
 import importlib
-import os
+import sys
 
 from fabric import api
 from fabric.decorators import task, parallel, serial
 
-import fabric_utils.artifactory_loader as artifactory_loader
+import artifactory.api
+import fabric_utils.deploy
 from fabric_utils.context_managers import with_cd_to_git_root
 from fabric_utils.decorators import task_with_shortened_hosts, get_hosts_from_shorts
 from fabric_utils.delivery_tasks import collect_tasks
 from fabric_utils.deploy import _run, _force_stop, _deploy, _render_git_info, _clone_or_pull_repo, error_print
-from fabric_utils.paths import ARTIFACTORY_MODEL_TAGS_TABLE_PATH, GIT_ROOT
+from fabric_utils.paths import GIT_ROOT, DATA_PATH
 from fabric_utils.patterns import kill_service_regex
 from fabric_utils.rabbit import create_queues as create_queues_routine
-from fabric_utils.svc import ArtifactoryTreeHandler as artifactory
 from fabric_utils.svc import GitTreeHandler as git
-from fabric_utils.svc import update_tags_table as update_tags_table_routine
 from fabric_utils.utils import GitRef
 
 api.env.use_ssh_config = True
@@ -138,36 +137,24 @@ def check(*selectors):
 
 @task
 @with_cd_to_git_root
-def load_artifacts(cred_str=None, worker_name_mask='*'):
+def load_artifacts(cred_str=None, worker_name_mask='worker'):
     """Загружает файлы из артифактори соогласно таблице тегов
     :param cred_str: credentials для артифактори в формате login:password
     :param worker_name_mask: маска для поиска папки с воркером, по умолчанию '*'
-
     """
-    if not os.path.exists(ARTIFACTORY_MODEL_TAGS_TABLE_PATH):
-        update_tags_table_routine()
-
     tasks = collect_tasks(worker_name_mask=worker_name_mask)
-    task_results = artifactory_loader.load_artifacts(tasks, cred_str)
-    failed_results = filter(lambda (resp, exc): exc or resp.status_code != 200, task_results)
-    if failed_results:
-        _msg = lambda r, e: 'Download {.url} failed with {details}'.format(
-            r, details=' '.join([str(r), str(e) if e else ''])
-        )
-        msg = '\n'.join([_msg(*result) for result in failed_results])
-        error_print(msg)
+
+    if not cred_str:
+        import global_settings
+        cred_str = global_settings.artifactory_credentials_provider.provide_content()
+
+    artifactory.api.execute_tasks(tasks, cred_str)
 
 
 @task_with_shortened_hosts
 def invalidate_artifactory_cache():
     """Очищает кеш загрузок из артифактори"""
-    artifactory.invalidate_cache()
-
-
-@task
-def update_tags_table():
-    """Обновляет таблицу тегов"""
-    update_tags_table_routine()
+    api.run('find %s -name "%s" -type f -delete' % (DATA_PATH, artifactory.api.info_file))
 
 
 @task
@@ -239,7 +226,6 @@ def tail(*selectors):
 def create_queues(rabbitmq_connection_string, path_to_job_settings):
     """Создает очереди в реббите по connection_string и relative/path/to/job/settings (без .py)"""
     # connection_string as 'ampq://{0[username]}:{0[password]}@{1[host]}:{1[port]:d}/{1[virtual_host]}'
-    import sys
     sys.path.append(GIT_ROOT)
 
     job_settings_module = importlib.import_module(path_to_job_settings.replace('/', '.'))
