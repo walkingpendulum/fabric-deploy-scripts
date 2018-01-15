@@ -107,6 +107,7 @@ def load_artifacts(cred_str=None, worker_name_mask='worker'):
     tasks = collect_tasks(worker_name_mask=worker_name_mask)
 
     if not cred_str:
+        sys.path.append(GIT_ROOT)
         import global_settings
         cred_str = global_settings.artifactory_credentials_provider.provide_content()
 
