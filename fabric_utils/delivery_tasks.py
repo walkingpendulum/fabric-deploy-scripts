@@ -51,6 +51,10 @@ def collect_tasks(worker_name_mask):
             '__uri': 'features/Data-latest.tar.gz',
             'destination': {'folder': os.path.abspath(os.path.join(DATA_PATH, 'Data'))},
         },
+        {
+            '__uri': 'common/private_pro_control-latest.tar.gz',
+            'destination': {'folder': os.path.abspath(os.path.join(DATA_PATH, 'common', 'private_pro_control'))},
+        },
     ]
 
     # models
