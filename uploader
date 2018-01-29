@@ -6,9 +6,8 @@ import argparse
 import os
 import subprocess
 
-import load_secrets
 import global_settings
-
+import load_secrets_from_vault
 
 artifactory_url_prefix = 'artifactory_prefix'
 
@@ -31,7 +30,7 @@ if __name__ == '__main__':
     parser.add_argument("-d", "--worker", dest='worker_name', required=True)
     args = parser.parse_args()
 
-    secrets = load_secrets.load('artifactory', path=global_settings.secrets_path)
+    secrets = load_secrets_from_vault.load('artifactory', path=global_settings.secrets_path)
     target = '{url_prefix}/{args.worker_name}/{file_name}'.format(
         url_prefix=artifactory_url_prefix,
         args=args,
