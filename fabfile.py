@@ -198,3 +198,30 @@ def create_queues(rabbitmq_connection_string, path_to_job_settings):
     for name in filter(lambda name: 'job_settings' in name, vars(job_settings_module)):
         job_settings = getattr(job_settings_module, name)
         create_queues_routine(rabbitmq_connection_string, job_settings)
+
+
+@task
+@serial
+def alive_status(*selectors):
+    """Проверяет, запустились ли все воркеры
+
+    usage:
+        watch GIT_ROOT=/var/local/service fab alive_status:s01,s02,s03
+    """
+    hosts_to_run = get_hosts_from_shorts(selectors)
+
+    @task
+    @parallel
+    def is_alive():
+        with api.settings(warn_only=True):
+            cmd = "import requests; print requests.get('http://localhost:9888/health').status_code == requests.codes.ok"
+            return api.run('python -c "%s"' % cmd)
+
+    with api.hide('everything'):
+        host_to_flags = api.execute(is_alive, hosts=hosts_to_run)
+
+    ready = sorted([host for host, flag in host_to_flags.items() if flag == 'True'])
+    not_ready = sorted(list(set(host_to_flags.keys()) - set(ready)))
+
+    output = '\n\n'.join(['Ready: \n\t' + '\n\t'.join(ready), 'Not ready: \n\t' + '\n\t'.join(not_ready)])
+    print(output)
