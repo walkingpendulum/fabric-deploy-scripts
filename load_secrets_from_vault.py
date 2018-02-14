@@ -9,7 +9,7 @@ from fabric_utils.vault import load_secrets_from_vault
 
 
 def load(secret_name, path=None):
-    path = path or '/var/run/secrets'
+    path = path or '/etc/secrets/'
     file_path = os.path.join(path, '%s.json' % secret_name)
     try:
         with open(file_path) as f:

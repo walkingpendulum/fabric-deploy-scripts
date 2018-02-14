@@ -3,6 +3,8 @@ from __future__ import print_function
 
 import importlib
 import sys
+import time
+from itertools import izip_longest
 
 from fabric import api
 from fabric.decorators import task, parallel, serial
@@ -209,16 +211,7 @@ def alive_status(*selectors):
         watch GIT_ROOT=/var/local/service fab alive_status:s01,s02,s03
     """
     hosts_to_run = get_hosts_from_shorts(selectors)
-
-    @task
-    @parallel
-    def is_alive():
-        with api.settings(warn_only=True):
-            cmd = "import requests; print requests.get('http://localhost:9888/health').status_code == requests.codes.ok"
-            return api.run('python -c "%s"' % cmd)
-
-    with api.hide('everything'):
-        host_to_flags = api.execute(is_alive, hosts=hosts_to_run)
+    host_to_flags = fabric_utils.deploy.readiness_probe(hosts_to_run)
 
     ready = sorted([host for host, flag in host_to_flags.items() if flag == 'True'])
     not_ready = sorted(list(set(host_to_flags.keys()) - set(ready)))
@@ -227,43 +220,55 @@ def alive_status(*selectors):
     print(output)
 
 
-# coding: utf-8
-from fabric import api
-from fabric.decorators import task, parallel
-import json
-import pandas as pd
-
-from dateutil.parser import parse
-
-
 @task
-@parallel
-def get_logs(log_filename, dump_filename, *selectors):
-    """
-    fab get_logs:duplicates_realty_susp,tmp,05
-    :param dump_filename:
-    :param selectors:
-    :return:
-    """
-    def _get_log():
-        with api.settings(warn_only=True):  # если вылетела ошибка -- не умирать, ограничиться warning'ом
-            return api.run('''cat /var/local/log/service/{}'''.format(log_filename))
+@serial
+def rolling_deploy(*selectors):
+    """Последовательный деплой сервиса на сервера
 
+    Игнорирует хосты gserver01/server11/server12! Используйте для них
+        $ GIT_ROOT=/var/local/service fab deploy_autoload_check:01 deploy_autoload:s11,s12
+
+
+    Хосты обрабатываются группами по 3. После деплоя на очередную группу хостов в цикле раз в 10 секунд
+    проверяются readiness probe на каждом хосте. Деплой на группу хостов считается успешным, если все
+    хосты успешно прошли readiness probe. Следующая группа хостов берется в работу только если предыдущая
+    была успешно завершена.
+
+    """
     hosts_to_run = get_hosts_from_shorts(selectors)
+    hosts_to_run = filter(
+        lambda host: all(to_skip_pattern not in host for to_skip_pattern in ['gserver01', 'server11', 'server12']),
+        hosts_to_run
+    )
 
-    with api.hide('everything'):  # скрыть весь консольный вывод
-        host_to_logs = api.execute(_get_log, hosts=hosts_to_run)
+    waves_str = '~~~~~~~~~~~~~~~~~~~~'
 
-    total_lines = []
-    for host, lines in host_to_logs.iteritems():
-        total_lines += lines.split('\r\n')
+    def grouper(n, iterable, fillvalue=None):
+        "grouper(3, 'ABCDEFG', 'x') --> ABC DEF Gxx"
+        args = [iter(iterable)] * n
+        return izip_longest(fillvalue=fillvalue, *args)
 
-    total_jsons = [json.loads(l) for l in total_lines if len(l)]
-    total_jsons = sorted(total_jsons, key=lambda x: parse(x['@timestamp']))
-    print('Total lines: {}, total jsons: {}'.format(len(total_lines), len(total_jsons)))
+    @task
+    @serial
+    def _deploy_task():
+        fabric_utils.deploy.deploy_service(executable_script='service.py')
 
-    keep_cols = ['@timestamp', 'filename', 'funcName', 'levelname', 'message', 'source_host']
-    df = pd.DataFrame(total_jsons)[keep_cols]
-    print('df shape: {}'.format(df.shape))
-    df.to_csv(dump_filename, encoding='utf-8')
+    for current_hosts_to_run in grouper(3, hosts_to_run):
+        current_hosts_to_run = filter(None, current_hosts_to_run)
+        if not current_hosts_to_run:
+            break
 
+        print('\n\n\n%s\n\tdeploy to %s\n%s' % (waves_str, ', '.join(current_hosts_to_run), waves_str))
+        api.execute(_deploy_task, hosts=current_hosts_to_run)
+
+        print('\n\t waiting for readiness probing.', end='')
+
+        while True:
+            time.sleep(10)
+            print('.', end='')
+
+            alive = fabric_utils.deploy.readiness_probe(current_hosts_to_run)
+            if all(x == 'True' for x in alive.values()):
+                break
+
+    print('\n%sSuccess!%s' % (waves_str, waves_str))

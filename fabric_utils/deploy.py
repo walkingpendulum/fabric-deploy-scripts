@@ -3,6 +3,7 @@ from __future__ import print_function
 import collections
 
 from fabric import api
+from fabric.decorators import task, parallel
 
 from fabric_utils.context_managers import with_cd_to_git_root
 from fabric_utils.paths import GIT_ROOT
@@ -70,3 +71,18 @@ def clone_or_pull_service_repo(path=GIT_ROOT, git_ref=None):
             git.clone(path, git_ref)
         else:
             git.force_pull(path, git_ref)
+
+
+def readiness_probe(hosts_to_run):
+
+    @task
+    @parallel
+    def _is_alive():
+        with api.settings(warn_only=True):
+            cmd = "import requests; print requests.get('http://localhost:9888/health').status_code == requests.codes.ok"
+            return api.run('python -c "%s"' % cmd)
+
+    with api.hide('everything'):
+        host_to_flags = api.execute(_is_alive, hosts=hosts_to_run)
+
+    return host_to_flags
