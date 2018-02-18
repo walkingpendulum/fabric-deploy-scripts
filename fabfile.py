@@ -125,31 +125,6 @@ def invalidate_artifactory_cache():
 
 
 @task
-@serial
-def code_version(*selectors):
-    """Собирает информацию о версии кода на хостах"""
-    hosts_to_run = get_hosts_from_shorts(selectors)
-
-    @task
-    @parallel
-    def _code_version():
-        info_str = git.info()
-        return info_str
-
-    @task
-    @parallel
-    def _git_dirty_index():
-        flag = not git.is_index_empty()
-        return flag
-
-    with api.hide('everything'):
-        host_to_info_str_mapping = api.execute(_code_version, hosts=hosts_to_run)
-        host_to_dirty_index_flag = api.execute(_git_dirty_index, hosts=hosts_to_run)
-
-    fabric_utils.deploy.render_git_info(host_to_info_str_mapping, host_to_dirty_index_flag)
-
-
-@task
 def grep(grep_str=''):
     """Устанавливает переменную grep_str, которая затем используется в таске tail"""
     if grep_str:
@@ -204,20 +179,35 @@ def create_queues(rabbitmq_connection_string, path_to_job_settings):
 
 @task
 @serial
-def alive_status(*selectors):
-    """Проверяет, запустились ли все воркеры
-
-    usage:
-        watch GIT_ROOT=/var/local/service fab alive_status:s01,s02,s03
-    """
+def status(*selectors):
+    """Собирает информацию о версии кода на хостах + readiness status"""
     hosts_to_run = get_hosts_from_shorts(selectors)
-    host_to_flags = fabric_utils.deploy.readiness_probe(hosts_to_run)
 
-    ready = sorted([host for host, flag in host_to_flags.items() if flag == 'True'])
-    not_ready = sorted(list(set(host_to_flags.keys()) - set(ready)))
+    @task
+    @parallel
+    def _code_version():
+        info_str = git.info()
+        return info_str
 
-    output = '\n\n'.join(['Ready: \n\t' + '\n\t'.join(ready), 'Not ready: \n\t' + '\n\t'.join(not_ready)])
-    print(output)
+    @task
+    @parallel
+    def _git_dirty_index():
+        flag = not git.is_index_empty()
+        return flag
+
+    with api.hide('everything'):
+        host_to_git_info_str_mapping = api.execute(_code_version, hosts=hosts_to_run)
+        host_to_dirty_index_flag = api.execute(_git_dirty_index, hosts=hosts_to_run)
+        host_to_readiness_flags = fabric_utils.deploy.readiness_probe(hosts_to_run)
+        host_to_probable_last_deploy_time = fabric_utils.deploy.probable_last_deploy_time(hosts_to_run)
+
+    fabric_utils.deploy.render_git_info(
+        host_to_git_info_str_mapping,
+        host_to_dirty_index_flag,
+        host_to_readiness_flags,
+        host_to_probable_last_deploy_time
+    )
+
 
 
 @task
