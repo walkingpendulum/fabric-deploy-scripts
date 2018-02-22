@@ -225,3 +225,45 @@ def alive_status(*selectors):
 
     output = '\n\n'.join(['Ready: \n\t' + '\n\t'.join(ready), 'Not ready: \n\t' + '\n\t'.join(not_ready)])
     print(output)
+
+
+# coding: utf-8
+from fabric import api
+from fabric.decorators import task, parallel
+import json
+import pandas as pd
+
+from dateutil.parser import parse
+
+
+@task
+@parallel
+def get_logs(log_filename, dump_filename, *selectors):
+    """
+    fab get_logs:duplicates_realty_susp,tmp,05
+    :param dump_filename:
+    :param selectors:
+    :return:
+    """
+    def _get_log():
+        with api.settings(warn_only=True):  # если вылетела ошибка -- не умирать, ограничиться warning'ом
+            return api.run('''cat /var/local/log/service/{}'''.format(log_filename))
+
+    hosts_to_run = get_hosts_from_shorts(selectors)
+
+    with api.hide('everything'):  # скрыть весь консольный вывод
+        host_to_logs = api.execute(_get_log, hosts=hosts_to_run)
+
+    total_lines = []
+    for host, lines in host_to_logs.iteritems():
+        total_lines += lines.split('\r\n')
+
+    total_jsons = [json.loads(l) for l in total_lines if len(l)]
+    total_jsons = sorted(total_jsons, key=lambda x: parse(x['@timestamp']))
+    print('Total lines: {}, total jsons: {}'.format(len(total_lines), len(total_jsons)))
+
+    keep_cols = ['@timestamp', 'filename', 'funcName', 'levelname', 'message', 'source_host']
+    df = pd.DataFrame(total_jsons)[keep_cols]
+    print('df shape: {}'.format(df.shape))
+    df.to_csv(dump_filename, encoding='utf-8')
+
