@@ -11,6 +11,8 @@ from fabric.decorators import task, parallel, serial
 
 import artifactory.api
 import fabric_utils.deploy
+import fabric_utils.tasks
+import fabric_utils.utils
 from fabric_utils.context_managers import with_cd_to_git_root
 from fabric_utils.decorators import task_with_shortened_hosts, get_hosts_from_shorts
 from fabric_utils.delivery_tasks import collect_tasks
@@ -185,29 +187,29 @@ def status(*selectors):
 
     @task
     @parallel
-    def _code_version():
-        info_str = git.info()
-        return info_str
+    def collect_status():
+        status_dict = {
+            'info': git.info(),
+            'index': not git.is_index_empty(),
+            'probe': fabric_utils.utils.readiness_probe()
+        }
 
-    @task
-    @parallel
-    def _git_dirty_index():
-        flag = not git.is_index_empty()
-        return flag
+        return status_dict
 
     with api.hide('everything'):
-        host_to_git_info_str_mapping = api.execute(_code_version, hosts=hosts_to_run)
-        host_to_dirty_index_flag = api.execute(_git_dirty_index, hosts=hosts_to_run)
-        host_to_readiness_flags = fabric_utils.deploy.readiness_probe(hosts_to_run)
-        host_to_probable_last_deploy_time = fabric_utils.deploy.probable_last_deploy_time(hosts_to_run)
+        host_to_status_mapping = api.execute(collect_status, hosts=hosts_to_run)
+
+    host_to_git_info_str, host_to_dirty_index_flag, host_to_readiness_flags = {}, {}, {}
+    for host, d in host_to_status_mapping.items():
+        host_to_git_info_str[host] = d.get('info', '')
+        host_to_dirty_index_flag[host] = d.get('index', '')
+        host_to_readiness_flags[host] = d.get('probe', '')
 
     fabric_utils.deploy.render_git_info(
-        host_to_git_info_str_mapping,
+        host_to_git_info_str,
         host_to_dirty_index_flag,
         host_to_readiness_flags,
-        host_to_probable_last_deploy_time
     )
-
 
 
 @task
@@ -257,7 +259,7 @@ def rolling_deploy(*selectors):
             time.sleep(10)
             print('.', end='')
 
-            alive = fabric_utils.deploy.readiness_probe(current_hosts_to_run)
+            alive = fabric_utils.tasks.readiness_probe_task(current_hosts_to_run)
             if all(x == 'True' for x in alive.values()):
                 break
 
