@@ -9,10 +9,11 @@ class GitTreeHandler(object):
     repo_url = 'repo_url'
 
     @staticmethod
-    def info():
+    def info(disable_color=False):
         with api.cd(GIT_ROOT):
             api.sudo('git fetch')
-            lines = api.run('git branch -vv')
+            cmd = ' '.join(['git', 'branch', '-vv', '--no-color' if disable_color else ''])
+            lines = api.run(cmd)
             info_str_ = next(line[len('* '):] for line in lines.split('\n') if line.startswith('* '))
 
         return info_str_

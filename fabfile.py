@@ -16,10 +16,10 @@ import fabric_utils.utils
 from fabric_utils.context_managers import with_cd_to_git_root
 from fabric_utils.decorators import task_with_shortened_hosts, get_hosts_from_shorts
 from fabric_utils.delivery_tasks import collect_tasks
+from fabric_utils.notifications import slack
 from fabric_utils.paths import GIT_ROOT, DATA_PATH
 from fabric_utils.patterns import kill_service_regex
 from fabric_utils.rabbit import create_queues as create_queues_routine
-from fabric_utils.svc import GitTreeHandler as git
 from fabric_utils.utils import GitRef
 
 api.env.use_ssh_config = True
@@ -183,33 +183,8 @@ def create_queues(rabbitmq_connection_string, path_to_job_settings):
 @serial
 def status(*selectors):
     """Собирает информацию о версии кода на хостах + readiness status"""
-    hosts_to_run = get_hosts_from_shorts(selectors)
-
-    @task
-    @parallel
-    def collect_status():
-        status_dict = {
-            'info': git.info(),
-            'index': not git.is_index_empty(),
-            'probe': fabric_utils.utils.readiness_probe()
-        }
-
-        return status_dict
-
-    with api.hide('everything'):
-        host_to_status_mapping = api.execute(collect_status, hosts=hosts_to_run)
-
-    host_to_git_info_str, host_to_dirty_index_flag, host_to_readiness_flags = {}, {}, {}
-    for host, d in host_to_status_mapping.items():
-        host_to_git_info_str[host] = d.get('info', '')
-        host_to_dirty_index_flag[host] = d.get('index', '')
-        host_to_readiness_flags[host] = d.get('probe', '')
-
-    fabric_utils.deploy.render_git_info(
-        host_to_git_info_str,
-        host_to_dirty_index_flag,
-        host_to_readiness_flags,
-    )
+    output = fabric_utils.deploy.status(*selectors)
+    print(output)
 
 
 @task
@@ -262,5 +237,13 @@ def rolling_deploy(*selectors):
             alive = fabric_utils.tasks.readiness_probe_task(current_hosts_to_run)
             if all(x == 'True' for x in alive.values()):
                 break
+
+    try:
+        output = fabric_utils.deploy.status(*selectors)
+        msg = 'service was deployed!\n```%s```' % output
+        slack('#tst', msg)
+    except Exception as e:
+        print("Can't send notification, skip this step.", file=sys.stderr)
+        print(e, file=sys.stderr)
 
     print('\n%sSuccess!%s' % (waves_str, waves_str))

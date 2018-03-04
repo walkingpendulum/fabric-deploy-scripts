@@ -4,8 +4,11 @@ from __future__ import print_function
 import collections
 
 from fabric import api
+from fabric.decorators import task, serial, parallel
 
+import fabric_utils.utils
 from fabric_utils.context_managers import with_cd_to_git_root
+from fabric_utils.decorators import get_hosts_from_shorts
 from fabric_utils.paths import GIT_ROOT
 from fabric_utils.patterns import kill_service_regex
 from fabric_utils.svc import GitTreeHandler as git
@@ -52,6 +55,8 @@ def render_git_info(host_to_git_info_str, host_to_dirty_index_flag, host_to_read
     readiness_status = lambda x: '(NOT READY)' if not host_to_readiness_flag[x] else ''
     render_line = lambda host: ' '.join([host, dirty_postfix(host), readiness_status(host)])
 
+    output = []
+
     for info_str, _hosts in info.items():
         _sorted_hosts_lines = sorted(_hosts, key=lambda h: (host_to_readiness_flag[h], host_to_dirty_index_flag[h], h))
         hosts_lines = '\n\t'.join([render_line(line) for line in _sorted_hosts_lines])
@@ -66,7 +71,9 @@ def render_git_info(host_to_git_info_str, host_to_dirty_index_flag, host_to_read
             git_info=info_str
         )
 
-        print(msg)
+        output.append(msg)
+
+    return '\n'.join(output)
 
 
 def clone_or_pull_service_repo(path=GIT_ROOT, git_ref=None):
@@ -79,3 +86,36 @@ def clone_or_pull_service_repo(path=GIT_ROOT, git_ref=None):
             git.clone(path, git_ref)
         else:
             git.force_pull(path, git_ref)
+
+
+def status(*selectors):
+    """Собирает информацию о версии кода на хостах + readiness status"""
+    hosts_to_run = get_hosts_from_shorts(selectors)
+
+    @task
+    @parallel
+    def collect_status():
+        status_dict = {
+            'info': git.info(disable_color=True),
+            'index': not git.is_index_empty(),
+            'probe': fabric_utils.utils.readiness_probe()
+        }
+
+        return status_dict
+
+    with api.hide('everything'):
+        host_to_status_mapping = api.execute(collect_status, hosts=hosts_to_run)
+
+    host_to_git_info_str, host_to_dirty_index_flag, host_to_readiness_flags = {}, {}, {}
+    for host, d in host_to_status_mapping.items():
+        host_to_git_info_str[host] = d.get('info', '')
+        host_to_dirty_index_flag[host] = d.get('index', '')
+        host_to_readiness_flags[host] = d.get('probe', '')
+
+    output = render_git_info(
+        host_to_git_info_str,
+        host_to_dirty_index_flag,
+        host_to_readiness_flags,
+    )
+
+    return output
