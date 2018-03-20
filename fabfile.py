@@ -235,7 +235,7 @@ def rolling_deploy(*selectors):
             print('.', end='')
 
             alive = fabric_utils.tasks.readiness_probe_task(current_hosts_to_run)
-            if all(x == 'True' for x in alive.values()):
+            if all(x is True for x in alive.values()):
                 break
 
     try:
