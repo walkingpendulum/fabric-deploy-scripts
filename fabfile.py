@@ -241,7 +241,7 @@ def rolling_deploy(*selectors):
     try:
         output = fabric_utils.deploy.status(*selectors)
         msg = 'service was deployed!\n```%s```' % output
-        slack('#tst', msg)
+        slack('#service-deploy', msg)
     except Exception as e:
         print("Can't send notification, skip this step.", file=sys.stderr)
         print(e, file=sys.stderr)
