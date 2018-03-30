@@ -35,6 +35,7 @@ def deploy_service(executable_script='service.py'):
     clone_or_pull_service_repo()
 
     with api.cd(GIT_ROOT):
+        api.sudo('find . -name \*.pyc -delete')
         api.sudo('fab load_artifacts')
         run_service_script(executable_script)
 
