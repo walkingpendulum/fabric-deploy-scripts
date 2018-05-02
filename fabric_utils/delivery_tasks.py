@@ -52,7 +52,7 @@ def collect_tasks(worker_name_mask):
             'destination': {'folder': os.path.abspath(os.path.join(DATA_PATH, 'Data'))},
         },
         {
-            '__uri': 'common/vin_parsing-latest.tar.gz',
+            '__uri': 'common/vin_parsing-20180502.tar.gz',
             'destination': {'folder': os.path.abspath(os.path.join(DATA_PATH, 'common', 'vin_parsing'))},
         },
     ]
