@@ -202,9 +202,15 @@ def rolling_deploy(*selectors):
     была успешно завершена.
 
     """
+    hosts_to_skip = [
+        'gserver05', 'gserver06', 'gserver07',   # это автозагрузочные
+        'gserver01', 'server10', 'server11', 'server12',     # эти собираемся отдавать, поэтому через rolling_deploy
+                                                            # не должны раскатываться. если все-таки нужно раскатить,
+                                                            # то сработает просто deploy
+    ]
     hosts_to_run = get_hosts_from_shorts(selectors)
     hosts_to_run = filter(
-        lambda host: all(to_skip_pattern not in host for to_skip_pattern in ['gserver05', 'gserver06', 'gserver07']),
+        lambda host: all(to_skip_pattern not in host for to_skip_pattern in hosts_to_skip),
         hosts_to_run
     )
 
