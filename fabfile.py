@@ -192,8 +192,8 @@ def status(*selectors):
 def rolling_deploy(*selectors):
     """Последовательный деплой сервиса на сервера
 
-    Игнорирует хосты gserver01/server11/server12! Используйте для них
-        $ GIT_ROOT=/var/local/service fab deploy_autoload_check:01 deploy_autoload:s11,s12
+    Игнорирует хосты gserver0{5,6,7}! Используйте для них
+        $ GIT_ROOT=/var/local/service fab deploy_autoload_check:05 deploy_autoload:06,07
 
 
     Хосты обрабатываются группами по 3. После деплоя на очередную группу хостов в цикле раз в 10 секунд
@@ -204,7 +204,7 @@ def rolling_deploy(*selectors):
     """
     hosts_to_run = get_hosts_from_shorts(selectors)
     hosts_to_run = filter(
-        lambda host: all(to_skip_pattern not in host for to_skip_pattern in ['gserver01', 'server11', 'server12']),
+        lambda host: all(to_skip_pattern not in host for to_skip_pattern in ['gserver05', 'gserver06', 'gserver07']),
         hosts_to_run
     )
 
