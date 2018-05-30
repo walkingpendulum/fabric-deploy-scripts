@@ -204,6 +204,7 @@ def rolling_deploy(*selectors):
     """
     hosts_to_skip = [
         'gserver05', 'gserver06', 'gserver07',   # это автозагрузочные
+        'server03', 'server10', 'server11',  # это отдаем
     ]
     hosts_to_run = get_hosts_from_shorts(selectors)
     hosts_to_run = filter(
