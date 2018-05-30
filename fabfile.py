@@ -204,9 +204,6 @@ def rolling_deploy(*selectors):
     """
     hosts_to_skip = [
         'gserver05', 'gserver06', 'gserver07',   # это автозагрузочные
-        'gserver01', 'server10', 'server11', 'server12',     # эти собираемся отдавать, поэтому через rolling_deploy
-                                                            # не должны раскатываться. если все-таки нужно раскатить,
-                                                            # то сработает просто deploy
     ]
     hosts_to_run = get_hosts_from_shorts(selectors)
     hosts_to_run = filter(
@@ -245,7 +242,7 @@ def rolling_deploy(*selectors):
                 break
 
     try:
-        output = fabric_utils.deploy.status(*selectors)
+        output = fabric_utils.deploy.status('all')
         msg = 'service was deployed!\n```%s```' % output
         slack('#service-deploy', msg)
     except Exception as e:
