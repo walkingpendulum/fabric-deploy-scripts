@@ -4,7 +4,8 @@ from __future__ import print_function
 import collections
 
 from fabric import api
-from fabric.decorators import task, serial, parallel
+from fabric.decorators import task, parallel
+from fabric.exceptions import NetworkError
 
 import fabric_utils.utils
 from fabric_utils.context_managers import with_cd_to_git_root
@@ -96,11 +97,14 @@ def status(*selectors):
     @task
     @parallel
     def collect_status():
-        status_dict = {
-            'info': git.info(disable_color=True),
-            'index': not git.is_index_empty(),
-            'probe': fabric_utils.utils.readiness_probe()
-        }
+        try:
+            status_dict = {
+                'info': git.info(disable_color=True),
+                'index': not git.is_index_empty(),
+                'probe': fabric_utils.utils.readiness_probe()
+            }
+        except NetworkError:
+            status_dict = {'info': '', 'index': '', 'probe': ''}
 
         return status_dict
 
