@@ -204,7 +204,7 @@ def rolling_deploy(*selectors):
     """
     hosts_to_skip = [
         'gserver05', 'gserver06', 'gserver07',   # это автозагрузочные
-        'server09', 'server10',  # это отдаем
+        'server08', 'server09', 'server10',  # это отдаем
     ]
     hosts_to_run = get_hosts_from_shorts(selectors)
     hosts_to_run = filter(
@@ -224,7 +224,7 @@ def rolling_deploy(*selectors):
     def _deploy_task():
         fabric_utils.deploy.deploy_service(executable_script='service.py')
 
-    for current_hosts_to_run in grouper(2, hosts_to_run):
+    for current_hosts_to_run in grouper(1, hosts_to_run):
         current_hosts_to_run = filter(None, current_hosts_to_run)
         if not current_hosts_to_run:
             break
